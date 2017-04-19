@@ -47,8 +47,6 @@ int main() {
     dec_wav wav_file;
     int storage_type = 0;
 
-    printf("Audio Player\r\n");
-
     button.fall(&button_fall);
     SdUsbConnect storage(MOUNT_NAME);
     audio.power();
