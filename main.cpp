@@ -29,7 +29,7 @@ AUDIO_GRBoard audio(0x80, (AUDIO_WRITE_BUFF_NUM - 1), 0);
 
 static void callback_audio_write_end(void * p_data, int32_t result, void * p_app_data) {
     if (result < 0) {
-        printf("audio write callback error %d\r\n", result);
+        printf("audio write callback error %ld\r\n", result);
     }
 }
 
@@ -45,7 +45,6 @@ int main() {
     int buff_index = 0;
     size_t audio_data_size;
     dec_wav wav_file;
-    int storage_type = 0;
 
     button.fall(&button_fall);
     SdUsbConnect storage(MOUNT_NAME);
@@ -84,14 +83,14 @@ int main() {
                                 || (audio.frequency(wav_file.GetSamplingRate()) == false)) {
                             printf("Error File  :%s\r\n", p->d_name);
                             printf("Audio Info  :%dch, %dbit, %dHz\r\n", wav_file.GetChannel(),
-                                    wav_file.GetBlockSize(), wav_file.GetSamplingRate());
+                                    wav_file.GetBlockSize(), (int)wav_file.GetSamplingRate());
                             printf("\r\n");
                             fclose(fp);
                             fp = NULL;
                         } else {
                             printf("File        :%s\r\n", p->d_name);
                             printf("Audio Info  :%dch, %dbit, %dHz\r\n", wav_file.GetChannel(),
-                                    wav_file.GetBlockSize(), wav_file.GetSamplingRate());
+                                    wav_file.GetBlockSize(), (int)wav_file.GetSamplingRate());
                             printf("Title       :%s\r\n", title_buf);
                             printf("Artist      :%s\r\n", artist_buf);
                             printf("Album       :%s\r\n", album_buf);

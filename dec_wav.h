@@ -109,7 +109,7 @@ public:
                                                + ((uint32_t)wk_read_buff[5] << 8)
                                                + ((uint32_t)wk_read_buff[6] << 16)
                                                + ((uint32_t)wk_read_buff[7] << 24);
-                                if (sub_chunk_size > (tag_size - 1)) {
+                                if (sub_chunk_size > (uint32_t)(tag_size - 1)) {
                                     wk_len = (tag_size - 1);
                                 } else {
                                     wk_len = sub_chunk_size;
@@ -149,17 +149,17 @@ public:
     size_t GetNextData(void *buf, size_t len) {
         if (block_size == 24) {
             // Add padding
-            int write_index = 0;
-            int wavfile_index;
-            int read_len;
-            int pading_index = 0;
+            uint32_t write_index = 0;
+            uint32_t wavfile_index;
+            uint32_t read_len;
+            uint32_t pading_index = 0;
             uint8_t * p_buf = (uint8_t *)buf;
             size_t ret;
 
             if ((music_data_index + len) > music_data_size) {
                 len = music_data_size - music_data_index;
             }
-            while (write_index < len) {
+            while (write_index < (uint32_t)len) {
                 read_len = (len - write_index) * 3 / 4;
                 if (read_len > sizeof(wk_wavfile_buff)) {
                     read_len = sizeof(wk_wavfile_buff);
