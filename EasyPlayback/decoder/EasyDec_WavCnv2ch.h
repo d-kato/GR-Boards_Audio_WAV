@@ -1,14 +1,35 @@
+/* mbed EasyDec_WavCnv2ch Library
+ * Copyright (C) 2017 dkato
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 /**************************************************************************//**
-* @file          dec_wav.h
+* @file          EasyDec_WavCnv2ch.h
 * @brief         wav
 ******************************************************************************/
-#include "mbed.h"
+#ifndef __EASY_DEC_WAV_CNV_2CH_H__
+#define __EASY_DEC_WAV_CNV_2CH_H__
 
-/** A class to communicate a dec_wav
+#include "EasyDecoder.h"
+
+/** A class to communicate a EasyDec_WavCnv2ch
  *
  */
-class dec_wav {
+class EasyDec_WavCnv2ch : public EasyDecoder {
 public:
+
+    static inline EasyDecoder* inst() { return new EasyDec_WavCnv2ch; }
 
     /** analyze header
      *
@@ -19,11 +40,11 @@ public:
      * @param fp file pointer
      * @return true = success, false = failure
      */
-    bool AnalyzeHeder(uint8_t * p_title, uint8_t * p_artist, uint8_t * p_album, uint16_t tag_size, FILE * fp) {
+    virtual bool AnalyzeHeder(char* p_title, char* p_artist, char* p_album, uint16_t tag_size, FILE* fp) {
         bool result = false;
         size_t read_size;
         uint8_t wk_read_buff[36];
-        uint8_t *data;
+        char *data;
         uint32_t chunk_size;
         uint32_t sub_chunk_size;
         uint32_t list_index_max;
@@ -104,21 +125,24 @@ public:
                             } else {
                                 data = NULL;
                             }
+                            sub_chunk_size = ((uint32_t)wk_read_buff[4] << 0)
+                                           + ((uint32_t)wk_read_buff[5] << 8)
+                                           + ((uint32_t)wk_read_buff[6] << 16)
+                                           + ((uint32_t)wk_read_buff[7] << 24);
                             if ((data != NULL) && (tag_size != 0)) {
-                                sub_chunk_size = ((uint32_t)wk_read_buff[4] << 0)
-                                               + ((uint32_t)wk_read_buff[5] << 8)
-                                               + ((uint32_t)wk_read_buff[6] << 16)
-                                               + ((uint32_t)wk_read_buff[7] << 24);
                                 if (sub_chunk_size > (uint32_t)(tag_size - 1)) {
                                     wk_len = (tag_size - 1);
                                 } else {
                                     wk_len = sub_chunk_size;
                                 }
                                 read_size = fread(data, sizeof(char), wk_len, wav_fp);
-                                read_index += sub_chunk_size;
-                                fseek(wav_fp, read_index, SEEK_SET);
                                 data[wk_len] = '\0';
                             }
+                            if ((sub_chunk_size & 0x00000001) != 0) {
+                                sub_chunk_size += 1;
+                            }
+                            read_index += sub_chunk_size;
+                            fseek(wav_fp, read_index, SEEK_SET);
                         }
                         if (data_index != 0) {
                             break;
@@ -146,7 +170,18 @@ public:
      * @param len data buffer length
      * @return get data size
      */
-    size_t GetNextData(void *buf, size_t len) {
+    virtual size_t GetNextData(void *buf, size_t len) {
+        size_t ret_size;
+        size_t read_max = len;
+
+        if ((block_size < 8) || ((block_size & 0x07) != 0)) {
+            return -1;
+        }
+
+        if ((channel == 1) && (len != 0)) {
+            read_max /= 2;
+        }
+
         if (block_size == 24) {
             // Add padding
             uint32_t write_index = 0;
@@ -156,11 +191,11 @@ public:
             uint8_t * p_buf = (uint8_t *)buf;
             size_t ret;
 
-            if ((music_data_index + len) > music_data_size) {
-                len = music_data_size - music_data_index;
+            if ((music_data_index + read_max) > music_data_size) {
+                read_max = music_data_size - music_data_index;
             }
-            while (write_index < (uint32_t)len) {
-                read_len = (len - write_index) * 3 / 4;
+            while (write_index < (uint32_t)read_max) {
+                read_len = (read_max - write_index) * 3 / 4;
                 if (read_len > sizeof(wk_wavfile_buff)) {
                     read_len = sizeof(wk_wavfile_buff);
                 }
@@ -170,7 +205,7 @@ public:
                     break;
                 }
                 wavfile_index = 0;
-                while ((write_index < len) && (wavfile_index < read_len)) {
+                while ((write_index < read_max) && (wavfile_index < read_len)) {
                     if (pading_index == 0) {
                         p_buf[write_index] = 0;
                     } else {
@@ -185,31 +220,61 @@ public:
                     write_index++;
                 }
             }
-
-            return write_index;
+            ret_size = write_index;
         } else {
-            if ((music_data_index + len) > music_data_size) {
-                len = music_data_size - music_data_index;
+            if ((music_data_index + read_max) > music_data_size) {
+                read_max = music_data_size - music_data_index;
             }
-            music_data_index += len;
+            music_data_index += read_max;
 
-            return fread(buf, sizeof(char), len, wav_fp);
+            ret_size = fread(buf, sizeof(char), read_max, wav_fp);
         }
+
+        if ((channel == 1) && (ret_size > 0)) {
+            int block_byte;
+            int idx_w = len - 1;
+            int idx_r = ret_size - 1;
+            int idx_r_last;
+            int j;
+
+            if (block_size == 24) {
+                block_byte = 4;
+            } else {
+                block_byte = block_size / 8;
+            }
+            while (idx_w >= 0) {
+                idx_r_last = idx_r;
+                for (j = 0; j < block_byte; j++) {
+                    ((uint8_t*)buf)[idx_w--] = ((uint8_t*)buf)[idx_r--];
+                }
+                idx_r = idx_r_last;
+                for (j = 0; j < block_byte; j++) {
+                    ((uint8_t*)buf)[idx_w--] = ((uint8_t*)buf)[idx_r--];
+                }
+            }
+            ret_size *= 2;
+        }
+
+        return ret_size;
     };
 
     /** get channel
      *
      * @return channel
      */
-    uint16_t GetChannel() {
-        return channel;
+    virtual uint16_t GetChannel() {
+        if (channel == 1) {
+            return 2;
+        } else {
+            return channel;
+        }
     };
 
     /** get block size
      *
      * @return block size
      */
-    uint16_t GetBlockSize() {
+    virtual uint16_t GetBlockSize() {
         return block_size;
     };
 
@@ -217,18 +282,18 @@ public:
      *
      * @return sampling rate
      */
-    uint32_t GetSamplingRate() {
+    virtual uint32_t GetSamplingRate() {
         return sampling_rate;
     };
 
 private:
-    #define FILE_READ_BUFF_SIZE    (3072)
-
     FILE * wav_fp;
     uint32_t music_data_size;
     uint32_t music_data_index;
     uint16_t channel;
     uint16_t block_size;
     uint32_t sampling_rate;
-    uint8_t wk_wavfile_buff[FILE_READ_BUFF_SIZE];
+    uint8_t wk_wavfile_buff[3072];
 };
+
+#endif
