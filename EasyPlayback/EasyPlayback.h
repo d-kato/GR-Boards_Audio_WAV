@@ -49,8 +49,8 @@ private:
     bool _skip;
     bool _pause;
     bool _init_end;
-    uint8_t *heep_buf;
-    uint8_t (*audio_buf)[AUDIO_WRITE_BUFF_SIZE];
+    uint8_t *_heap_buf;
+    uint8_t (*_audio_buf)[AUDIO_WRITE_BUFF_SIZE];
     std::map<std::string, EasyDecoder*(*)()> m_lpDecoders;
 
     EasyDecoder * create_decoer_class(const char* filename);

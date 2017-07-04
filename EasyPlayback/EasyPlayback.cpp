@@ -21,13 +21,13 @@
 EasyPlayback::EasyPlayback() : audio(0x80, (AUDIO_WRITE_BUFF_NUM - 1), 0), _buff_index(0),
     _skip(false), _pause(false), _init_end(false)
 {
-    heep_buf = new uint8_t[AUDIO_WRITE_BUFF_SIZE * AUDIO_WRITE_BUFF_NUM + 31];
-    audio_buf = (uint8_t (*)[AUDIO_WRITE_BUFF_SIZE])(((uint32_t)heep_buf + 31ul) & ~31ul);
+    _heap_buf = new uint8_t[AUDIO_WRITE_BUFF_SIZE * AUDIO_WRITE_BUFF_NUM + 31];
+    _audio_buf = (uint8_t (*)[AUDIO_WRITE_BUFF_SIZE])(((uint32_t)_heap_buf + 31ul) & ~31ul);
 }
 
 EasyPlayback::~EasyPlayback()
 {
-    delete [] heep_buf;
+    delete [] _heap_buf;
 }
 
 bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size)
@@ -87,7 +87,7 @@ bool EasyPlayback::play(const char* filename)
             if (_skip) {
                 break;
             }
-            p_buf = audio_buf[_buff_index];
+            p_buf = _audio_buf[_buff_index];
             audio_data_size = decoder->GetNextData(p_buf, AUDIO_WRITE_BUFF_SIZE);
             if (audio_data_size > 0) {
                 dcache_clean(p_buf, audio_data_size);
