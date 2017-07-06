@@ -1,4 +1,3 @@
-
 #include "mbed.h"
 #include "SdUsbConnect.h"
 #include "EasyPlayback.h"
@@ -10,10 +9,6 @@
 
 static InterruptIn skip_btn(USER_BUTTON0);
 static EasyPlayback AudioPlayer;
-
-static char title_tag[TAG_BUFF_SIZE];
-static char artist_tag[TAG_BUFF_SIZE];
-static char album_tag[TAG_BUFF_SIZE];
 
 static void skip_btn_fall(void) {
     AudioPlayer.skip();
@@ -30,7 +25,7 @@ int main() {
     AudioPlayer.add_decoder<EasyDec_WavCnv2ch>(".WAV");
 
     // volume control
-    AudioPlayer.outputVolume(0.7, 0.7);
+    AudioPlayer.outputVolume(0.5);  // Volume control (min:0.0 max:1.0)
 
     // button setting
     skip_btn.fall(&skip_btn_fall);
@@ -49,14 +44,6 @@ int main() {
                 // make file path
                 sprintf(file_path, "/%s/%s", MOUNT_NAME, p->d_name);
                 printf("%s\r\n", file_path);
-
-                // get tag info
-                if (AudioPlayer.get_tag(file_path, title_tag, artist_tag, album_tag, TAG_BUFF_SIZE)) {
-                    printf("Title :%s\r\n", title_tag);
-                    printf("Artist:%s\r\n", artist_tag);
-                    printf("Album :%s\r\n", album_tag);
-                    printf("\r\n");
-                }
 
                 // playback
                 AudioPlayer.play(file_path);

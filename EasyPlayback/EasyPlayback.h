@@ -33,7 +33,7 @@ public:
     void pause(void);
     void pause(bool type);
     void skip(void);
-    bool outputVolume(float leftVolumeOut, float rightVolumeOut);
+    bool outputVolume(float VolumeOut);
 
     template<typename T>
     void add_decoder(const string& extension) {

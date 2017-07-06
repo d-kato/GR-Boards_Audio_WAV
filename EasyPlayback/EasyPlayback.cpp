@@ -124,13 +124,13 @@ void EasyPlayback::skip(void)
     _skip = true;
 }
 
-bool EasyPlayback::outputVolume(float leftVolumeOut, float rightVolumeOut)
+bool EasyPlayback::outputVolume(float VolumeOut)
 {
     if (!_init_end) {
         audio.power();
         _init_end = true;
     }
-    return audio.outputVolume(leftVolumeOut, rightVolumeOut);
+    return audio.outputVolume(VolumeOut, VolumeOut);
 }
 
 EasyDecoder * EasyPlayback::create_decoer_class(const char* filename)
