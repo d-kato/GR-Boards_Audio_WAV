@@ -5,7 +5,6 @@
 
 #define FILE_NAME_LEN          (64)
 #define MOUNT_NAME             "storage"
-#define TAG_BUFF_SIZE          (64 + 1) //null-terminated
 
 static InterruptIn skip_btn(USER_BUTTON0);
 static EasyPlayback AudioPlayer;
@@ -30,12 +29,8 @@ int main() {
     // button setting
     skip_btn.fall(&skip_btn_fall);
 
-    // wait for the storage device to be connected
-    printf("Finding a storage...\r\n");
-    storage.wait_connect();
-    printf("done\r\n");
-
-    while(1) {
+    while (1) {
+        storage.wait_connect();
         // file search
         d = opendir("/"MOUNT_NAME"/");
         while ((p = readdir(d)) != NULL) {
@@ -52,4 +47,3 @@ int main() {
         closedir(d);
     }
 }
-
