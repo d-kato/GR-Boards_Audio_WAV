@@ -16,7 +16,6 @@ static void skip_btn_fall(void) {
 int main() {
     DIR  * d;
     struct dirent * p;
-    char file_path[sizeof("/"MOUNT_NAME"/") + FILE_NAME_LEN];
     SdUsbConnect storage(MOUNT_NAME);
 
     // decoder setting
@@ -34,6 +33,11 @@ int main() {
         // file search
         d = opendir("/"MOUNT_NAME"/");
         while ((p = readdir(d)) != NULL) {
+#if(1) // High-speed access to storage. You can get more data from storage with one request.
+            printf("%s\r\n", p->d_name);
+            AudioPlayer.play(p->d_name, storage.get_fs());  // playback
+#else  // Conventional method.
+            char file_path[sizeof("/"MOUNT_NAME"/") + FILE_NAME_LEN];
             size_t len = strlen(p->d_name);
             if (len < FILE_NAME_LEN) {
                 // make file path
@@ -43,6 +47,7 @@ int main() {
                 // playback
                 AudioPlayer.play(file_path);
             }
+#endif
         }
         closedir(d);
     }

@@ -22,7 +22,25 @@
 class EasyDecoder {
 public:
 
+    EasyDecoder() : _fp(NULL), _file(NULL) {}
+
     virtual ~EasyDecoder(){}
+
+    bool SetFilePointer(FILE* fp) {
+        _fp = fp;
+       if (_fp == NULL) {
+           return false;
+       }
+       return true;
+    }
+
+    bool SetFileHandle(File* file) {
+        _file = file;
+       if (_file == NULL) {
+           return false;
+       }
+       return true;
+    }
 
     /** analyze header
      *
@@ -30,10 +48,9 @@ public:
      * @param p_artist artist tag buffer
      * @param p_album album tag buffer
      * @param tag_size tag buffer size
-     * @param fp file pointer
      * @return true = success, false = failure
      */
-    virtual bool AnalyzeHeder(char* p_title, char* p_artist, char* p_album, uint16_t tag_size, FILE* fp) = 0;
+    virtual bool AnalyzeHeder(char* p_title, char* p_artist, char* p_album, uint16_t tag_size) = 0;
 
     /** get next data
      *
@@ -61,6 +78,30 @@ public:
      */
     virtual uint32_t GetSamplingRate() = 0;
 
+protected:
+    ssize_t _read(void *buffer, size_t size) {
+        if (_file != NULL) {
+            return _file->read(buffer, size);
+        } else if (_fp != NULL) {
+            return fread(buffer, sizeof(char), size, _fp);
+        } else {
+            return -1;
+        }
+    }
+
+    off_t _seek(off_t offset, int whence = SEEK_SET) {
+        if (_file != NULL) {
+            return _file->seek(offset, whence);
+        } else if (_fp != NULL) {
+            return fseek(_fp, offset, whence);
+        } else {
+            return -1;
+        }
+    }
+
+private:
+    FILE* _fp;
+    File* _file;
 };
 
 #endif

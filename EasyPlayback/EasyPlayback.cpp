@@ -18,21 +18,41 @@
 #include "dcache-control.h"
 #include "EasyPlayback.h"
 
-EasyPlayback::EasyPlayback() : audio(0x80, (AUDIO_WRITE_BUFF_NUM - 1), 0), _buff_index(0),
-    _skip(false), _pause(false), _init_end(false)
+EasyPlayback::EasyPlayback(audio_type_t type) : 
+     _buff_index(0), _type(type), _skip(false), _pause(false), _init_end(false)
 {
-    _heap_buf = new uint8_t[AUDIO_WRITE_BUFF_SIZE * AUDIO_WRITE_BUFF_NUM + 31];
-    _audio_buf = (uint8_t (*)[AUDIO_WRITE_BUFF_SIZE])(((uint32_t)_heap_buf + 31ul) & ~31ul);
+    _audio_ssif = NULL;
+    if (_type == AUDIO_TPYE_SSIF) {
+        _audio_buff_size = 4096;
+        _audio_ssif = new AUDIO_GRBoard(0x80, (AUDIO_WRITE_BUFF_NUM - 1), 0);
+        _audio = _audio_ssif;
+    } else if (_type == AUDIO_TPYE_SPDIF) {
+        MBED_ASSERT(false);
+    } else {
+        MBED_ASSERT(false);
+    }
+    _heap_buf = new uint8_t[_audio_buff_size * AUDIO_WRITE_BUFF_NUM + 31];
+    _audio_buf = (uint8_t *)(((uint32_t)_heap_buf + 31ul) & ~31ul);
 }
 
 EasyPlayback::~EasyPlayback()
 {
+    if (_audio_ssif != NULL) {
+        delete _audio_ssif;
+    }
+#if (R_BSP_SPDIF_ENABLE == 1)
+    if (_audio_spdif != NULL) {
+        delete _audio_spdif;
+    }
+#endif
     delete [] _heap_buf;
 }
 
-bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size)
+bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size, FATFileSystem* pfs)
 {
-    FILE * fp;
+    FILE * fp = NULL;
+    File file;
+    int err = -1;
     EasyDecoder * decoder;
     bool ret = false;
 
@@ -41,24 +61,40 @@ bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, 
         return false;
     }
 
-    fp = fopen(filename, "r");
-    if (decoder->AnalyzeHeder(p_title, p_artist, p_album, tag_size, fp) != false) {
+    if (pfs == NULL) {
+        fp = fopen(filename, "r");
+        decoder->SetFilePointer(fp);
+    } else {
+        err = file.open(pfs, filename, O_RDONLY);
+        decoder->SetFileHandle(&file);
+    }
+
+    if ((fp == NULL) && (err != 0)) {
+        // do nothing
+    } else if (decoder->AnalyzeHeder(p_title, p_artist, p_album, tag_size) != false) {
         ret = true;
     }
     delete decoder;
-    fclose(fp);
+    if (fp != NULL) {
+        fclose(fp);
+    }
 
     return ret;
 }
 
-bool EasyPlayback::play(const char* filename)
+bool EasyPlayback::play(const char* filename, FATFileSystem* pfs)
 {
     const rbsp_data_conf_t audio_write_async_ctl = {NULL, NULL};
-    size_t audio_data_size = AUDIO_WRITE_BUFF_SIZE;
-    FILE * fp;
+    size_t audio_data_size;
+    FILE * fp = NULL;
+    File file;
+    int err = -1;
     uint8_t * p_buf;
+    uint32_t read_size;
+    uint32_t i;
     EasyDecoder * decoder;
     bool ret = false;
+    uint32_t padding_size;
 
     decoder = create_decoer_class(filename);
     if (decoder == NULL) {
@@ -66,32 +102,73 @@ bool EasyPlayback::play(const char* filename)
     }
 
     if (!_init_end) {
-        audio.power();
-        audio.outputVolume(1.0, 1.0);
+        _audio->power();
+        _audio->outputVolume(1.0, 1.0);
         _init_end = true;
     }
 
      _skip = false;
-    fp = fopen(filename, "r");
-    if (decoder->AnalyzeHeder(NULL, NULL, NULL, 0, fp) == false) {
+    if (pfs == NULL) {
+        fp = fopen(filename, "r");
+        decoder->SetFilePointer(fp);
+    } else {
+        err = file.open(pfs, filename, O_RDONLY);
+        decoder->SetFileHandle(&file);
+    }
+
+    if ((fp == NULL) && (err != 0)) {
+        // do nothing
+    } else if (decoder->AnalyzeHeder(NULL, NULL, NULL, 0) == false) {
         // do nothing
     } else if  ((decoder->GetChannel() != 2)
-            || (audio.format(decoder->GetBlockSize()) == false)
-            || (audio.frequency(decoder->GetSamplingRate()) == false)) {
+            || (_audio->format(decoder->GetBlockSize()) == false)
+            || (_audio->frequency(decoder->GetSamplingRate()) == false)) {
         // do nothing
     } else {
-        while (audio_data_size == AUDIO_WRITE_BUFF_SIZE) {
+        if ((_type == AUDIO_TPYE_SPDIF) && (decoder->GetBlockSize() == 16)) {
+            padding_size = 2;
+            read_size = _audio_buff_size / 2;
+        } else if ((decoder->GetBlockSize() == 20) || (decoder->GetBlockSize() == 24)) {
+            padding_size = 1;
+            read_size = _audio_buff_size * 3 / 4;
+        } else {
+            padding_size = 0;
+            read_size = _audio_buff_size;
+        }
+        audio_data_size = read_size;
+
+        while (audio_data_size == read_size) {
             while ((_pause) && (!_skip)) {
                 Thread::wait(100);
             }
             if (_skip) {
                 break;
             }
-            p_buf = _audio_buf[_buff_index];
-            audio_data_size = decoder->GetNextData(p_buf, AUDIO_WRITE_BUFF_SIZE);
+            p_buf = &_audio_buf[_audio_buff_size * _buff_index];
+            audio_data_size = decoder->GetNextData(p_buf, read_size);
             if (audio_data_size > 0) {
-                dcache_clean(p_buf, audio_data_size);
-                audio.write(p_buf, audio_data_size, &audio_write_async_ctl);
+                // fill the shortfall with 0
+                for (i = audio_data_size; i < read_size; i++) {
+                    p_buf[i] = 0;
+                }
+
+                if (padding_size != 0) {
+                    int idx_w = _audio_buff_size - 1;
+                    int idx_r = read_size - 1;
+                    uint32_t block_byte = (decoder->GetBlockSize() + 7) / 8;
+
+                    while (idx_w >= 0) {
+                        // padding
+                        for (i = 0; i < padding_size; i++) {
+                            p_buf[idx_w--] = 0x00;
+                        }
+                        for (i = 0; i < block_byte; i++) {
+                            p_buf[idx_w--] = p_buf[idx_r--];
+                        }
+                    }
+                }
+                dcache_clean(p_buf, _audio_buff_size);
+                _audio->write(p_buf, _audio_buff_size, &audio_write_async_ctl);
                 _buff_index = (_buff_index + 1) & AUDIO_MSK_RING_BUFF;
             }
         }
@@ -99,7 +176,9 @@ bool EasyPlayback::play(const char* filename)
         ret = true;
     }
     delete decoder;
-    fclose(fp);
+    if (fp != NULL) {
+        fclose(fp);
+    }
 
     return ret;
 }
@@ -127,10 +206,10 @@ void EasyPlayback::skip(void)
 bool EasyPlayback::outputVolume(float VolumeOut)
 {
     if (!_init_end) {
-        audio.power();
+        _audio->power();
         _init_end = true;
     }
-    return audio.outputVolume(VolumeOut, VolumeOut);
+    return _audio->outputVolume(VolumeOut, VolumeOut);
 }
 
 EasyDecoder * EasyPlayback::create_decoer_class(const char* filename)
