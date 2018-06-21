@@ -48,11 +48,9 @@ EasyPlayback::~EasyPlayback()
     delete [] _heap_buf;
 }
 
-bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size, FATFileSystem* pfs)
+bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size)
 {
     FILE * fp = NULL;
-    File file;
-    int err = -1;
     EasyDecoder * decoder;
     bool ret = false;
 
@@ -61,17 +59,10 @@ bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, 
         return false;
     }
 
-    if (pfs == NULL) {
-        fp = fopen(filename, "r");
-        decoder->SetFilePointer(fp);
-    } else {
-        err = file.open(pfs, filename, O_RDONLY);
-        decoder->SetFileHandle(&file);
-    }
-
-    if ((fp == NULL) && (err != 0)) {
+    fp = fopen(filename, "r");
+    if (fp == NULL) {
         // do nothing
-    } else if (decoder->AnalyzeHeder(p_title, p_artist, p_album, tag_size) != false) {
+    } else if (decoder->AnalyzeHeder(p_title, p_artist, p_album, tag_size, fp) != false) {
         ret = true;
     }
     delete decoder;
@@ -82,13 +73,11 @@ bool EasyPlayback::get_tag(const char* filename, char* p_title, char* p_artist, 
     return ret;
 }
 
-bool EasyPlayback::play(const char* filename, FATFileSystem* pfs)
+bool EasyPlayback::play(const char* filename)
 {
     const rbsp_data_conf_t audio_write_async_ctl = {NULL, NULL};
     size_t audio_data_size;
     FILE * fp = NULL;
-    File file;
-    int err = -1;
     uint8_t * p_buf;
     uint32_t read_size;
     uint32_t i;
@@ -108,17 +97,10 @@ bool EasyPlayback::play(const char* filename, FATFileSystem* pfs)
     }
 
      _skip = false;
-    if (pfs == NULL) {
-        fp = fopen(filename, "r");
-        decoder->SetFilePointer(fp);
-    } else {
-        err = file.open(pfs, filename, O_RDONLY);
-        decoder->SetFileHandle(&file);
-    }
-
-    if ((fp == NULL) && (err != 0)) {
+    fp = fopen(filename, "r");
+    if (fp == NULL) {
         // do nothing
-    } else if (decoder->AnalyzeHeder(NULL, NULL, NULL, 0) == false) {
+    } else if (decoder->AnalyzeHeder(NULL, NULL, NULL, 0, fp) == false) {
         // do nothing
     } else if  ((decoder->GetChannel() != 2)
             || (_audio->format(decoder->GetBlockSize()) == false)
@@ -136,6 +118,7 @@ bool EasyPlayback::play(const char* filename, FATFileSystem* pfs)
             read_size = _audio_buff_size;
         }
         audio_data_size = read_size;
+        setvbuf(fp, NULL, _IONBF, 0); // unbuffered
 
         while (audio_data_size == read_size) {
             while ((_pause) && (!_skip)) {

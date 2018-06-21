@@ -33,8 +33,8 @@ public:
 
     EasyPlayback(audio_type_t type = AUDIO_TPYE_SSIF);
     ~EasyPlayback();
-    bool get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size, FATFileSystem* pfs = NULL);
-    bool play(const char* filename, FATFileSystem* pfs = NULL);
+    bool get_tag(const char* filename, char* p_title, char* p_artist, char* p_album, uint16_t tag_size);
+    bool play(const char* filename);
     bool is_paused(void);
     void pause(void);
     void pause(bool type);

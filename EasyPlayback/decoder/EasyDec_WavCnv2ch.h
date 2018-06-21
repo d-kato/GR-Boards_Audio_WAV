@@ -40,7 +40,7 @@ public:
      * @param fp file pointer
      * @return true = success, false = failure
      */
-    virtual bool AnalyzeHeder(char* p_title, char* p_artist, char* p_album, uint16_t tag_size) {
+    virtual bool AnalyzeHeder(char* p_title, char* p_artist, char* p_album, uint16_t tag_size, FILE* fp) {
         bool result = false;
         size_t read_size;
         uint8_t wk_read_buff[36];
@@ -53,8 +53,12 @@ public:
         uint32_t data_index = 0;
         uint16_t wk_len;
 
+        if (fp == NULL) {
+            return false;
+        }
         music_data_size  = 0;
         music_data_index = 0;
+        wav_fp = fp;
         if (p_title != NULL) {
             p_title[0] = '\0';
         }
@@ -65,7 +69,7 @@ public:
             p_album[0] = '\0';
         }
 
-        read_size = _read(&wk_read_buff[0], 36);
+        read_size = fread(&wk_read_buff[0], sizeof(char), 36, wav_fp);
         if (read_size < 36) {
             // do nothing
         } else if (memcmp(&wk_read_buff[0], "RIFF", 4) != 0) {
@@ -83,7 +87,7 @@ public:
                           + ((uint32_t)wk_read_buff[27] << 24);
             block_size = ((uint32_t)wk_read_buff[34] << 0) + ((uint32_t)wk_read_buff[35] << 8);
             while (1) {
-                read_size = _read(&wk_read_buff[0], 8);
+                read_size = fread(&wk_read_buff[0], sizeof(char), 8, wav_fp);
                 read_index += 8;
                 if (read_size < 8) {
                     break;
@@ -99,16 +103,16 @@ public:
                             break;
                         } else {
                             data_index = read_index;
-                            _seek(chunk_size, SEEK_CUR);
+                            fseek(wav_fp, chunk_size, SEEK_CUR);
                             read_index += chunk_size;
                         }
                     } else if (memcmp(&wk_read_buff[0], "LIST", 4) == 0) {
                         list_ok = true;
                         list_index_max = read_index + chunk_size;
-                        read_size = _read(&wk_read_buff[0], 4);
+                        read_size = fread(&wk_read_buff[0], sizeof(char), 4, wav_fp);
                         read_index += 4;
                         while (read_index < list_index_max) {
-                            read_size = _read(&wk_read_buff[0], 8);
+                            read_size = fread(&wk_read_buff[0], sizeof(char), 8, wav_fp);
                             read_index += 8;
                             if (read_size < 8) {
                                 break;
@@ -131,29 +135,29 @@ public:
                                 } else {
                                     wk_len = sub_chunk_size;
                                 }
-                                read_size = _read(data, wk_len);
+                                read_size = fread(data, sizeof(char), wk_len, wav_fp);
                                 data[wk_len] = '\0';
                             }
                             if ((sub_chunk_size & 0x00000001) != 0) {
                                 sub_chunk_size += 1;
                             }
                             read_index += sub_chunk_size;
-                            _seek(read_index, SEEK_SET);
+                            fseek(wav_fp, read_index, SEEK_SET);
                         }
                         if (data_index != 0) {
                             break;
                         } else {
-                            _seek(list_index_max, SEEK_SET);
+                            fseek(wav_fp, list_index_max, SEEK_SET);
                         }
                     } else {
-                        _seek(chunk_size, SEEK_CUR);
+                        fseek(wav_fp, chunk_size, SEEK_CUR);
                         read_index += chunk_size;
                     }
                 }
             }
 
             if (data_index != 0) {
-                _seek(data_index, SEEK_SET);
+                fseek(wav_fp, data_index, SEEK_SET);
             }
         }
 
@@ -183,7 +187,7 @@ public:
         }
         music_data_index += read_max;
 
-        ret_size = _read(buf, read_max);
+        ret_size = fread(buf, sizeof(char), read_max, wav_fp);
 
         if ((channel == 1) && (ret_size > 0)) {
             int block_byte;
@@ -238,6 +242,7 @@ public:
     };
 
 private:
+    FILE * wav_fp;
     uint32_t music_data_size;
     uint32_t music_data_index;
     uint16_t channel;
